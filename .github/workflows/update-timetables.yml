@@ -1,0 +1,32 @@
+name: Update URBS timetables
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"     # every Monday 06:17 in Curitiba (09:17 UTC)
+  workflow_dispatch:          # "Run workflow" button for a manual refresh
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Rebuild bus data from the newest URBS snapshot
+        id: build
+        run: |
+          python3 tools/update.py | tee log.txt
+          grep -q "CHANGED=1" log.txt && echo "changed=1" >> "$GITHUB_OUTPUT" || echo "changed=0" >> "$GITHUB_OUTPUT"
+          rm log.txt
+      - name: Publish if the timetables changed
+        if: steps.build.outputs.changed == '1'
+        run: |
+          git config user.name "rota-curitiba-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data.json index.html README.md
+          git commit -m "Update URBS timetables ($(date -u +%Y-%m-%d))"
+          git push
